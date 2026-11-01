@@ -104,9 +104,9 @@ public class FloorService(IUnitOfWork uow, ICurrentUser currentUser) : IFloorSer
             return Error.Forbidden("You do not manage this facility.");
 
         var units = await uow.Repository<StorageUnit>().Query().Where(u => u.FloorId == floorId).ToListAsync(ct);
-        var rented = units.Where(u => Rented.Contains(u.Status)).Select(u => u.UnitCode).ToList();
-        if (rented.Count > 0)
-            return Error.Conflict($"Customers still hold units on this floor: {string.Join(", ", rented)}.");
+        var rented = string.Join(", ", units.Where(u => Rented.Contains(u.Status)).Select(u => u.UnitCode));
+        if (rented.Length > 0)
+            return Error.Conflict($"Customers still hold units on this floor: {rented}.");
 
         if (await HasHistoryAsync(units.Select(u => u.StorageUnitId).ToList(), ct))
         {

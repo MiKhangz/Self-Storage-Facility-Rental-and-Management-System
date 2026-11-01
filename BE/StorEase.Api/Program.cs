@@ -132,6 +132,9 @@ if (Encoding.UTF8.GetByteCount(jwt.Key) < 32)
     throw new InvalidOperationException(
         "Jwt:Key is missing or shorter than 32 characters. Set it in BE/StorEase.Api/appsettings.Development.json.");
 
+// Accept-Language picks the language of error messages (FluentValidation's own included). Only the UI culture
+// changes: numbers and dates in the API stay the same for everyone.
+app.UseRequestLocalization(new RequestLocalizationOptions().SetDefaultCulture("en").AddSupportedUICultures("en", "vi"));
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 // Configure the HTTP request pipeline.
