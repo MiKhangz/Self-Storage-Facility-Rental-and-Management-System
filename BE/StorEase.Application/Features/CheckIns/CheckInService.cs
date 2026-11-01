@@ -209,9 +209,9 @@ public class CheckInService(
         var code = request.AccessCode.Trim();
         var candidates = await UsableCodes().Where(a => VisibleContracts().Any(c => c.ContractId == a.ContractId))
             .Select(a => new { a.ContractId, a.CodeHash, a.CodeCipher }).ToListAsync(ct);
-        // Decrypting is microseconds; the slow password hash is only for codes issued before codes were kept encrypted.
+        // Decrypting is microseconds; the slow password hash is for codes with no readable copy: older ones, or after a key change.
         var matches = candidates
-            .Where(a => a.CodeCipher is { } cipher ? protector.Unprotect(cipher) == code : hasher.Verify(code, a.CodeHash))
+            .Where(a => (a.CodeCipher is { } cipher ? protector.Unprotect(cipher) : null) is { } plain ? plain == code : hasher.Verify(code, a.CodeHash))
             .Select(a => a.ContractId).Distinct().ToList();
         if (matches.Count == 0)
             return Error.NotFound("No working access code matches. Check the code with the customer.");

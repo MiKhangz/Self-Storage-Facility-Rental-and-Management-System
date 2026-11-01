@@ -4,5 +4,6 @@ namespace StorEase.Application.Interfaces;
 public interface ICodeProtector
 {
     string Protect(string value);
-    string Unprotect(string protectedValue);
+    /// <summary>The value, or null when it cannot be read (it was encrypted with a key since replaced).</summary>
+    string? Unprotect(string protectedValue);
 }

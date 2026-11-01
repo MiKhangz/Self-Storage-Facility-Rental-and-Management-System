@@ -72,7 +72,7 @@ public class AccessCodeService(IUnitOfWork uow, IPasswordHasher hasher, ICurrent
         var taken = uow.Repository<AccessCode>().Query()
             .Where(a => a.IsActive && a.CodeCipher != null && a.ContractId != contract.ContractId
                 && a.Contract.StorageUnit.FacilityId == facilityId)
-            .Select(a => a.CodeCipher!).AsEnumerable().Select(protector.Unprotect).ToHashSet();
+            .Select(a => a.CodeCipher!).AsEnumerable().Select(protector.Unprotect).OfType<string>().ToHashSet();
         string code;
         do code = RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
         while (taken.Contains(code));

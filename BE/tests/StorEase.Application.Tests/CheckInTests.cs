@@ -176,11 +176,9 @@ public class CheckInTests
         t.Db.AccessCodes.Where(a => a.ContractId == contractId).Should().ContainSingle().Which.SuspendedAt.Should().NotBeNull();
     }
 
-    [Fact]
-    public async Task Two_renters_with_the_same_code_are_never_guessed_between()
+    /// <summary>A second renter at the same facility, on unit A102, whose code is stored with the given cipher.</summary>
+    private static void SeedOtherRenter(TestDb t, string pin, string cipher)
     {
-        using var t = Create();
-        SeedContract(t, ContractStatus.Active);
         var other = new Contract
         {
             Reservation = new Reservation
@@ -193,15 +191,44 @@ public class CheckInTests
         };
         other.AccessCodes.Add(new AccessCode
         {
-            CodeHash = Hasher.Hash(Pin), CodeCipher = TestCodes.Protector.Protect(Pin), IssuedAt = DateTime.UtcNow,
+            CodeHash = Hasher.Hash(pin), CodeCipher = cipher, IssuedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(30), IsActive = true,
         });
         t.Db.Add(other);
         t.Db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task Two_renters_with_the_same_code_are_never_guessed_between()
+    {
+        using var t = Create();
+        SeedContract(t, ContractStatus.Active);
+        SeedOtherRenter(t, Pin, TestCodes.Protector.Protect(Pin));
 
         var found = await new CheckInService(t.Uow, Staff, Hasher, TestCodes.Protector, Codes(t))
             .FindByAccessCodeAsync(new FindByAccessCodeRequest(Pin), default);
 
         found.Error!.Type.Should().Be(ErrorType.Conflict, "the desk must not pick one of two renters at random");
+    }
+
+    [Fact]
+    public async Task A_code_encrypted_with_a_replaced_key_stops_nothing()
+    {
+        const string oldPin = "111222";
+        using var t = Create();
+        var contractId = SeedContract(t, ContractStatus.Active);
+        SeedOtherRenter(t, oldPin, AesCodeProtector.FromSecret("a-secret-since-replaced").Protect(oldPin));
+        var otherContractId = t.Db.Contracts.Single(c => c.ContractNumber == "CT-TWIN").ContractId;
+        var desk = new CheckInService(t.Uow, Staff, Hasher, TestCodes.Protector, Codes(t));
+
+        var found = await desk.FindByAccessCodeAsync(new FindByAccessCodeRequest(oldPin), default);
+        var visit = await desk.CheckInAsync(new CheckInRequest(contractId, null), default);
+        var left = await desk.CheckOutAsync(visit.Value!.CheckInId, default); // a new code for this renter reads every other code here
+        var renterReads = await new AccessCodeService(t.Uow, Hasher, OtherCustomer, TestCodes.Protector).GetActiveAsync(otherContractId, default);
+
+        found.Value!.ContractId.Should().Be(otherContractId, "the desk falls back to the hash");
+        left.IsSuccess.Should().BeTrue(left.Error?.Message);
+        renterReads.IsSuccess.Should().BeTrue(renterReads.Error?.Message);
+        renterReads.Value!.Code.Should().BeNull("the digits are lost; the customer issues a new code");
     }
 }

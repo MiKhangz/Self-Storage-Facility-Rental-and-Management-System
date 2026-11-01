@@ -8,8 +8,8 @@ namespace StorEase.Infrastructure.Services;
 public sealed class AesCodeProtector(byte[] key) : ICodeProtector
 {
     /// <summary>
-    /// shortcut: the key is derived from the JWT signing secret, so rotating that secret makes stored codes unreadable
-    /// (customers then issue a new one); give access codes their own key in settings before production.
+    /// shortcut: the key is derived from the JWT signing secret, so rotating that secret makes stored codes unreadable:
+    /// the desk still finds them by their hash, and customers issue a new one to see the digits. Give access codes their own key in settings before production.
     /// </summary>
     public static AesCodeProtector FromSecret(string secret) =>
         new(HKDF.DeriveKey(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(secret), 32, info: Encoding.UTF8.GetBytes("StorEase.AccessCode")));
@@ -25,12 +25,19 @@ public sealed class AesCodeProtector(byte[] key) : ICodeProtector
         return Convert.ToBase64String(output);
     }
 
-    public string Unprotect(string protectedValue)
+    public string? Unprotect(string protectedValue)
     {
         var input = Convert.FromBase64String(protectedValue);
         var plain = new byte[input.Length - 28];
         using var aes = new AesGcm(key, 16);
-        aes.Decrypt(input.AsSpan(0, 12), input.AsSpan(12, plain.Length), input.AsSpan(12 + plain.Length), plain);
+        try
+        {
+            aes.Decrypt(input.AsSpan(0, 12), input.AsSpan(12, plain.Length), input.AsSpan(12 + plain.Length), plain);
+        }
+        catch (CryptographicException)
+        {
+            return null;
+        }
         return Encoding.UTF8.GetString(plain);
     }
 }
